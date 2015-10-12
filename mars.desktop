@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Mars MIPS Simulator
+Comment=MARS
+Type=Application
+Categories=Development;
+Exec=java -jar /home/darrien/Code/IDE/Mars/Mars4_5.jar
+Terminal=false
+StartupNotify=true
+Icon=/home/darrien/Code/IDE/Mars/Mars_Ico.jpg
