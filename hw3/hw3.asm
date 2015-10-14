@@ -1,9 +1,8 @@
 
 	.data
-TOKEN:	.word 	0,0
+TOKEN:	.word 	0x20202020,0x20202020
 tokArray: .word	0:60
 inBuf:	.space	80
-prBuf:	.space 	12
 retAddr: .word	0
 st_prompt:	.asciiz	"Enter a new input line. \n"
 cerr: 	.asciiz	"Error with input. Taking input and storing in tokArray.\n"
@@ -32,7 +31,7 @@ main:
 
 newline:
 	jal	getline
-	
+	li	$a3, 0
 	li	$t5,0			# $t5: index to inBuf
 	li	$s3,0			# $s3: index to TOKEN
 	# State table driver
@@ -76,17 +75,18 @@ ACT1:
 #	 adjust remainint token space
 ###################################
 ACT2:
-	# check for $s3 <=7
-	bge 	$s3, 7, ACT4
+	move	$s3, $0
 	sb	$a0, TOKEN($s3)
 	addi	$s3, $s3, 1
+	move	$t1, $s0
 	jr 	$v1
+	# else jr $v1 or T=7/return
 	
 	
 ######################################
 ACT3:
 	# check for $s3 <=7
-	bge 	$s3, 7, ACT4
+	bgt 	$s3, 7, ACT4
 	sb	$a0, TOKEN($s3)
 	addi	$s3, $s3, 1
 	jr 	$v1
@@ -102,72 +102,76 @@ ACT4:
 	lw	$t9, TOKEN+4($0)
 	sw	$t9, tokArray($a3)
 	
-	addi	$a3, $a3, 4
 	# Originally a0, revert if there are problems
-	addi	$s0, $s0, 0x30
-	sw 	$a0, tokArray($a3)
+	beq	$t1, 6, octothorpe
+	
+	b	a4action
 	# copy 2nd word to tokArray+4
 	# copy T+0x30 ($a0) to tokArray+8 (0x30 for printable ASCII)
 	# clear TOKEN
 	# update $s3 to point to the next entry in tokArray
-	li 	$t7, 0
-	li	$t8, 8
 	
-	a4loop:
-		sb	$t8, TOKEN($t7)
-		ble	$t7, 7, a4loop
-		addi	$t7, $t7, 1
-	a4ret:
-		# Updating $s3 to go back to 0, and adding 4 to $a3, to move onto the next word
-		 addi	$a3, $a3, 4
-		 li	$s3, 0
-		 jr	$v1
+octothorpe:
+	li $t1, 5
+
+a4action:
+	addi	$t6, $t1, 48
+	addi	$a3, $a3, 4
+	sw 	$t6, tokArray($a3)
+
+	lb	$t6, tokArray($a3)
+	addi 	$a3, $a3, 1
+	sb 	$t6, tokArray($a3)
+	
+	
+	li	$t6, '\n'
+	addi	$a3, $a3, 1
+	sb	$t6, tokArray($a3)
+	
+	subi	$a3, $a3, 2
+	li	$t6, '\t'
+	sb	$t6, tokArray($a3)
+	
+	li	$t7, 0
+	li	$t8 0x20
+	
+
+li	$t7, 0x20
+li	$t8, 0	
+
+a4loop:
+	sb	$t7, TOKEN($t8)
+	addi	$t8, $t8, 1
+	blt	$t8, 8, a4loop		
+
+a4update:
+	addi	$a3, $a3, 4
+	li	$s3, 0
+	jr	$v1
+
 
 # Prints out stuff 
 printline:
 	la $a0, inBuf
 	li $v0, 4
 	syscall
-	jr $v1
-	
+	jr $ra	
 
 # Prints chars and types in neat table
 printTokArray:
-	la	$t7, 0 	# Index of tokarray
-	la	$t6, prBuf	# Concatenating all characters into pfBuf
+	li 	$t7, 0
 	
-	prloop:
-		la $t8, 0	# index of substring in tokArray
-	
-		dubprloop:
-			lb	$a0, tokArray($t8)	# Char in tokArray offset by $t8
-			sb	$a0, prBuf($t8)		# Loading characters into tmpString to be printed 	
-			addi	$t8, $t8, 1		# Index of specific string
-			addi	$t7, $t7, 1		# Universal index of tokArray
-			ble	$t8, 7, dubprloop
-			b prterm
-	prterm: 	#print terminate, finishing with part of input
-		li	$t4, '\0'	# Process of putting null terminator at end of string
-		sb	$t4, prBuf($t8)	 	
-		addi	$t8, $t8, 1
-		
-		lb	$t4, tokArray($t7) # Get weight
-		sb	$t4, prBuf($t8)	   # Storing weight
-		addi	$t8, $t8, 1
-		
-		lb	$t4, '\n'
-		sb	$t4, prBuf($t8)	# Storing new line to make input readable
-
-		la	$a0, prBuf
-		li	$v0, 4		
-		syscall	
-		
-		blt	$t7, 60, prloop # If past tokArray, move on, else, redo 
-		jr 	$ra
+ploop:
+	la 	$a0, tokArray($t7)
+	li	$v0, 4
+	syscall
+	addi	$t7, $t7, 12
+	blt	$t8, 240, ploop
+	jr	$ra
 
 cleanInBuf:
-	lw $t7, 0
-	lw $s0, 0
+	li $t7, 0
+	li $s0, 0
 
 cleanLoop:
 	lw	$0, inBuf($t7)
@@ -194,12 +198,11 @@ ERROR:
 	jr	$v1	# Ignore error - move onto good input
 	
 RETURN:
+	beq	$t1, 5, dump
 	la	$t8, Q3		# Loading in address of Q3: 
 	lw	$t8, ($t8)	# Load first byte of $t8 into $t8 (ACT4 called)
 	jalr	$v1, $t8	# Make it so that we can return to RETURN and end everything
 	b 	dump
-	
-
 	
 	
 	
@@ -216,11 +219,21 @@ getline:
 	
 	# Load $s0, with delimiter, $t7 with final index in array
 	# Load delimiter into final position in inBuf
+	li 	$s4, 0
 	li	$t8, '#'
-	li	$t7, 79
-	sb	$t8, inBuf($t7)
 
-	jr	$ra
+getLoop:
+	lb	$t7, inBuf($s4)
+	bge	$s4, 79, getfin
+	beq	$t7, '\0', getfin
+	beq	$t7, '\n', getfin
+	addi 	$s4, $s4, 1
+	b getLoop
+	
+getfin:
+	sb	$t8, inBuf($s4)
+	jr 	$ra
+	
 
 
 #function linear search
@@ -228,7 +241,7 @@ getline:
 #   $s0: retval -- type of the letter in $a0
 lin_search:
 	li	$t0,0		# I
-	li	$s0, -1		# retval
+	li	$s0, 7		# retval
 loop:
 	bge	$t0, 72, Ret
 	sll	$t0, $t0, 3
@@ -406,29 +419,30 @@ Tabchar:
 	.word 'Y', 2
 	.word 'Z', 2
 
-	.word 'a', '2' 
-	.word 'b', '2' 
-	.word 'c', '2' 
-	.word 'd', '2' 
-	.word 'e', '2' 
-	.word 'f', '2' 
-	.word 'g', '2' 
-	.word 'h', '2' 
-	.word 'i', '2' 
-	.word 'j', '2' 
-	.word 'k', '2'
-	.word 'l', '2' 
-	.word 'm', '2' 
-	.word 'n', '2' 
-	.word 'o', '2' 
-	.word 'p', '2' 
-	.word 'q', '2' 
-	.word 'r', '2' 
-	.word 's', '2' 
-	.word 't', '2' 
-	.word 'u', '2'
-	.word 'v', '2' 
-	.word 'w', '2' 
-	.word 'x', '2' 
-	.word 'y', '2'
-	.word 'z', '2'
+	.word 'a', 2 
+	.word 'b', 2 
+	.word 'c', 2 
+	.word 'd', 2 
+	.word 'e', 2 
+	.word 'f', 2 
+	.word 'g', 2 
+	.word 'h', 2 
+	.word 'i', 2 
+	.word 'j', 2 
+	.word 'k', 2
+	.word 'l', 2 
+	.word 'm', 2 
+	.word 'n', 2 
+	.word 'o', 2 
+	.word 'p', 2 
+	.word 'q', 2 
+	.word 'r', 2 
+	.word 's', 2 
+	.word 't', 2 
+	.word 'u', 2
+	.word 'v', 2 
+	.word 'w', 2 
+	.word 'x', 2 
+	.word 'y', 2
+	.word 'z', 2
+3
