@@ -40,6 +40,7 @@ newline:
 driver:	lw	$s2, ($s1)
 	jalr	$v1, $s2	# Save return addr in $v1
 
+	abs	$s0, $s0
 	sll	$s0, $s0, 2	# Multiply by 4 for word boundary
 	add	$s1, $s1, $s0
 	sra	$s0, $s0, 2 	# Shift back after operation is completed
@@ -101,42 +102,53 @@ ACT4:
 	lw	$t9, TOKEN+4($0)
 	sw	$t9, tokArray($a3)
 	
-	beq	$t1, 6, octothorpe 	# If hash, go to hash specific function
-	b	a4action			# Else, jump to the action
+	# Originally a0, revert if there are problems
+	beq	$t1, 6, octothorpe
+	
+	b	a4action
+	# copy 2nd word to tokArray+4
+	# copy T+0x30 ($a0) to tokArray+8 (0x30 for printable ASCII)
+	# clear TOKEN
+	# update $s3 to point to the next entry in tokArray
 	
 octothorpe:
 	li $t1, 5
 
 a4action:
-	addi	$t6, $t1, 48	# Making it a valid ascii character
-	addi	$a3, $a3, 4		# Moving on to the next word
-	sw 	$t6, tokArray($a3)	# Storing it
+	addi	$t6, $t1, 48
+	addi	$a3, $a3, 4
+	sw 	$t6, tokArray($a3)
 
-	lb	$t6, tokArray($a3)	
+	lb	$t6, tokArray($a3)
 	addi 	$a3, $a3, 1
 	sb 	$t6, tokArray($a3)
 	
 	
-	li	$t6, '\n'			# Adding in the newline character
+	li	$t6, '\n'
 	addi	$a3, $a3, 1
 	sb	$t6, tokArray($a3)
 	
-	subi	$a3, $a3, 2		# And the tab for formatting
+	subi	$a3, $a3, 2
 	li	$t6, '\t'
 	sb	$t6, tokArray($a3)
 	
-	li	$t7, 0				# Load up a counter, and a register that holds a space
-	li	$t8 0x20	
+	li	$t7, 0
+	li	$t8 0x20
+	
 
-	a4loop:
-		sb	$t7, TOKEN($t8)		# Filling with spaces
-		addi	$t8, $t8, 1
-		blt	$t8, 8, a4loop		
+li	$t7, 0x20
+li	$t8, 0	
 
-	a4update:
-		addi	$a3, $a3, 4		# Reset counters/indices
-		li	$s3, 0
-		jr	$v1
+a4loop:
+	sb	$t7, TOKEN($t8)
+	addi	$t8, $t8, 1
+	blt	$t8, 8, a4loop		
+
+a4update:
+	addi	$a3, $a3, 4
+	li	$s3, 0
+	jr	$v1
+
 
 # Prints out stuff 
 printline:
@@ -149,7 +161,6 @@ printline:
 printTokArray:
 	li 	$t7, 0
 	
-<<<<<<< HEAD
 ploop:
 	la 	$a0, tokArray($t7)
 	li	$v0, 4
@@ -157,22 +168,11 @@ ploop:
 	addi	$t7, $t7, 12
 	blt	$t7, 240, ploop
 	jr	$ra
-=======
-	peloop:
-		la 	$a0, tokArray($t7)
-		li	$v0, 4
-		syscall
-		addi	$t7, $t7, 12
-		blt	$t8, 240, ploop
-		jr	$ra
->>>>>>> fe748ef584a7c28640059be71ab3ad151a89fcd3
 
-# Cleans inBuf, and zeroes it out
-cleanInBuf:	
+cleanInBuf:
 	li $t7, 0
 	li $s0, 0
 
-<<<<<<< HEAD
 cleanLoop:
 	sb	$0, inBuf($t7)
 	addi	$t7, $t7, 1
@@ -180,16 +180,7 @@ cleanLoop:
 	li	$t0, 0
 	jr 	$ra
 
-=======
-	cleanLoop:
-		lw	$0, inBuf($t7)
-		addi	$t7, $t7, 1
-		ble	$t7, 80, loop
-		lw	$t0, 0
-		jr 	$v1
->>>>>>> fe748ef584a7c28640059be71ab3ad151a89fcd3
 
-# Same deal as above
 cleanTokArray:
 	li	 $t7, 0	# count
 	li	 $t8, 60
@@ -201,7 +192,7 @@ cleanTokArray:
 		jr	$ra
 
 ERROR:
-	la	$a0, cerr	# Still pretending this is c++, prints error message to stdout
+	la	$a0, cerr	# Still pretending this is c++, prints error message
 	li	$v0, 4
 	syscall
 	
@@ -232,20 +223,17 @@ getline:
 	li 	$s4, 0
 	li	$t8, '#'
 
-	# Finds newlines, null terminators, or the end of the string, and inserts
-	# an octothorpe in its position 
-	getLoop:
-		lb	$t7, inBuf($s4)
-		bge	$s4, 79, getfin
-		beq	$t7, '\0', getfin
-		beq	$t7, '\n', getfin
-		addi 	$s4, $s4, 1
-		b getLoop
+getLoop:
+	lb	$t7, inBuf($s4)
+	bge	$s4, 79, getfin
+	beq	$t7, '\0', getfin
+	beq	$t7, '\n', getfin
+	addi 	$s4, $s4, 1
+	b getLoop
 	
-	# Finally stores result from getLoop
-	getfin:
-		sb	$t8, inBuf($s4)
-		jr 	$ra
+getfin:
+	sb	$t8, inBuf($s4)
+	jr 	$ra
 	
 
 
@@ -254,7 +242,7 @@ getline:
 #   $s0: retval -- type of the letter in $a0
 lin_search:
 	li	$t0,0		# I
-	li	$s0, 7		# retval, default val is now 7, because -1 creates an endless loop when there's an error condition >_>
+	li	$s0, 7		# retval
 loop:
 	bge	$t0, 72, Ret
 	sll	$t0, $t0, 3
