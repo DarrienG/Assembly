@@ -166,7 +166,7 @@ ploop:
 	li	$v0, 4
 	syscall
 	addi	$t7, $t7, 12
-	blt	$t8, 240, ploop
+	blt	$t7, 240, ploop
 	jr	$ra
 
 cleanInBuf:
@@ -174,11 +174,11 @@ cleanInBuf:
 	li $s0, 0
 
 cleanLoop:
-	lw	$0, inBuf($t7)
+	sb	$0, inBuf($t7)
 	addi	$t7, $t7, 1
-	ble	$t7, 80, loop
-	lw	$t0, 0
-	jr 	$v1
+	ble	$t7, 80, cleanLoop
+	li	$t0, 0
+	jr 	$ra
 
 
 cleanTokArray:
@@ -189,6 +189,7 @@ cleanTokArray:
 		sb	$0, tokArray($t7)
 		addi	$t7, $t7, 1
 		blt 	$t7, $t8, cleaningloop
+		jr	$ra
 
 ERROR:
 	la	$a0, cerr	# Still pretending this is c++, prints error message
