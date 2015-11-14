@@ -5,8 +5,8 @@ tokArray: .word	0:60
 inBuf:	.space	80
 retAddr: .word	0
 st_prompt:	.asciiz	"Enter a new input line. \n"
-new_line: 		.asciiz "\n"
-cerr: 	.asciiz	"Error with input. Taking input and storing in tokArray.\n"
+new_line: 	.asciiz "\n"
+cerr: 		.asciiz	"Error with input. Taking input and storing in tokArray.\n"
 double_error:	.asciiz "Double Definition Error\n"
 
 symTab:		.word	0:80
@@ -18,7 +18,11 @@ symIndex:	.word 	0
 isComma:	.word 	0
 valVar:		.word 	0
 curSymIndex:	.word	0
-
+saveRA:		.word 	0
+symStatusPrint:	.word	0
+symValPrint:	.word	0:2
+symTabPrint:	.word	0x000a0009
+symTokenPrint:	.word	0x0000000, 0x00000000, 0x09000000
 	.text
 
 .globl main
@@ -45,7 +49,11 @@ newline:
 	li	$a3, 0
 	li	$t5,0			# $t5: index to inBuf
 	li	$s3,0			# $s3: index to TOKEN
+
 	# State table driver
+
+	
+	
 	la	$s1, Q0
 
 driver:	lw	$s2, ($s1)
@@ -70,19 +78,20 @@ dump:	jal	printline
 
 nextTok:
 	addi	$t8, $t8, 12		# i+= 12 to move to next token
-	lb	$t6, tokArray($t7)
-	subi	$t7, $t7, 12		# Move back after checking
+	lb	$t6, tokArray($t8)
+	subi	$t8, $t8, 12		# Move back after checking
 	bne	$t6, ':', operator	# Check to see if : there or not 
 	
-	lw	$t2, tokArray($t7)
+	lw	$t2, tokArray($t8)
 	sw	$t2, TOKEN ($0)
 	lw	$t2, tokArray+4($0)
+	sw	$t2, TOKEN+4($0)
 	
 	li	$t2, 1
 	sw	$t2, DEFN		# set DEFN to 1
 	la	$t3, VARIABLE
 	jalr	$v1, $t3		# Storing return address in $v1
-	addi	$t8, $t8, 12
+	addi	$t8, $t8, 24
 	
 	
 operator:
@@ -132,7 +141,7 @@ dumpCont:
 	jal	cleanInBuf
 	jal	cleanTokArray
 	jal	printSymTab
-	jal 	clearSymTab
+	#jal 	clearSymTab
 	
 	# LOC += 4
 	lw	$t6, LOC
@@ -247,6 +256,10 @@ printline:
 	la $a0, inBuf
 	li $v0, 4
 	syscall
+	
+	la $a0, new_line
+	li $v0, 4
+	syscall
 	jr $ra	
 
 # Prints chars and types in neat table
@@ -296,6 +309,7 @@ RETURN:
 	lw	$t8, ($t8)	# Load first byte of $t8 into $t8 (ACT4 called)
 	jalr	$v1, $t8	# Make it so that we can return to RETURN and end everything
 	b 	dump
+	
 	
 	
 	
@@ -408,19 +422,19 @@ LOOKUP:
 LOOKUPLoop:	
 	# Initially loading words from symTab and TOKEN
 	lw	$t0, TOKEN($0)
-	sll 	$t3, $t3, 4		# Mult by 16 (one element in STAB)
+#	sll 	$t3, $t3, 4		# Mult by 16 (one element in STAB)
 	lw	$t5, symTab($0)
-	sra	$t3, $t3, 4
+#	sra	$t3, $t3, 4
 	bne	$t0, $t5, notEqual
 	
 	# Loading second words from TOKEN and symTab
 	lw	$t0, TOKEN+4($t3)
-	sll 	$t3, $t3, 4		# Mult by 16 (one element in STAB)
+#	sll 	$t3, $t3, 4		# Mult by 16 (one element in STAB)
 	lw	$t5, symTab+4($t3)
-	sra	$t3, $t3, 4
+#	sra	$t3, $t3, 4
 	beq	$t0, $t5, LOOKUPSuccess
 notEqual:	
-	addi	$t3, $t3, 1		# ++i
+	addi	$t3, $t3, 16		# ++i
 	bge	$t3, 20, LOOKUPFail	# Iterate 20 times (all elements)
 	b	LOOKUPLoop
 LOOKUPSuccess:
@@ -440,7 +454,7 @@ saveSymTab:
 	sw	$t0, symTab+4($t5)
 	
 	li	$t0, 0
-	sw 	$t0, symTab+8($0)
+	sw 	$t0, symTab+8($5)
 	
 	lw 	$t0, newStatus
 	sw	$t0, symTab+12($0)
@@ -454,15 +468,66 @@ printSymTab:
 	li	$t5, 0
 	
 printSymLoop:
-	la 	$a0, symTab($t5)
+	
+	lw	$t0, symTab($t5)
+	sw	$t0, symTokenPrint($0)
+	
+	lw	$t0, symTab+4($t5)
+	sw	$t0, symTokenPrint+4($0)
+			
+	la	$a0, symTokenPrint($0)
 	li	$v0, 4
 	syscall
 	
-	#la	$a0, new_line
+	lw 	$a0, symTab+8($t5)
+	sw	$ra, saveRA
+	jal 	hex2char
 	
-	addi	$t7, $t7, 12
-	blt	$t7, 240, ploop
+	
+	sw	$v0, symValPrint($0)
+	la	$a0, symValPrint($0)
+	li	$v0, 4
+	syscall
+	
+	
+	lw	$a0, symTab+12($t5)
+	jal	hex2char
+	#sw	$v0, symTab+12($t5)
+	
+	#lb	$t0, symTab+15($t5)
+	#sb	$t0, symTab+13($t5)
+	#li	$t0, '\t'
+	#sb	$t0, symTab+12($t5)
+	#li	$t0, '\n'
+	#sb	$t0, symTab+4($t5)
+	#li	$t0, '\0'
+	#sb 	$t0, symTab+15($t5)
+	lw	$ra, saveRA
+	
+	#la	$a0, symTab+8($t5)
+	#li	$v0, 4
+	
+	
+	
+	
+	srl	$v0, $v0, 24				# move num to beginning of word 
+	sb	$v0, symStatusPrint+1($0)
+	la	$a0, symStatusPrint($0)
+	li	$v0, 4
+	syscall
+	
+	la	$a0, new_line
+	li	$v0, 4
+	syscall
+	
+	addi 	$t5, $t5, 16
+	blt	$t5, 320, printSymLoop
+	li	$t3, 0x20202020
+	sw	$t3, TOKEN($0)
+	sw	$t3, TOKEN+4($0)
+	
 	jr	$ra
+	
 
 
 clearSymTab:
@@ -537,6 +602,7 @@ hex2char:
 		# initialize registers
 		li	$t1, 0x0000000f	# $t1: mask of 4 bits
 		li	$t9, 3			# $t9: counter limit
+		li	$v0, 0
 
 nibble2char:
 		and 	$t0, $a0, $t1		# $t0 = least significant 4 bits of $a0
@@ -562,9 +628,9 @@ collect:
 		bgez	$t9, nibble2char
 
 		# restore registers
-		sw	$t0, saveReg($0)
-		sw	$t1, saveReg+4($0)
-		sw	$t9, saveReg+8($0)
+		lw	$t0, saveReg($0)
+		lw	$t1, saveReg+4($0)
+		lw	$t9, saveReg+8($0)
 		jr	$ra
 
 
@@ -682,7 +748,8 @@ Q10:    .word  ERROR
 	
 Tabchar: 
 	.word ' ', 5
- 	.word '#', 6 
+ 	.word '#', 6
+	.word '$', 4 
 	.word '(', 4 
 	.word ')', 4 
 	.word '*', 3 
