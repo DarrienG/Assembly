@@ -19,9 +19,9 @@ isComma:	.word 	0
 valVar:		.word 	0
 curSymIndex:	.word	0
 saveRA:		.word 	0
-symStatusPrint:	.word	0
+#symStatusPrint:	.word	0
 symValPrint:	.word	0:2
-symTabPrint:	.word	0x000a0009
+symStatusPrint:	.word	0x000a0009
 symTokenPrint:	.word	0x0000000, 0x00000000, 0x09000000
 	.text
 
