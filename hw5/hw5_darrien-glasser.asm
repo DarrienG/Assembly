@@ -12,17 +12,18 @@ double_error:	.asciiz "Double Definition Error\n"
 symTab:		.word	0:80
 LOC:		.word   0x400
 DEFN:		.word 	0
-newStatus: 	.word	0
-oldStatus:	.word 	0
-symIndex:	.word 	0
-isComma:	.word 	0
+newStat: 	.word	0
+oldStat:	.word 	0
+symDex:	.word 	0
+delim:	.word 	0
 valVar:		.word 	0
-curSymIndex:	.word	0
-saveRA:		.word 	0
-#symStatusPrint:	.word	0
+currentDex:	.word	0
+saveRet:		.word 	0
+#printStat:	.word	0
 symValPrint:	.word	0:2
-symStatusPrint:	.word	0x000a0009
-symTokenPrint:	.word	0x0000000, 0x00000000, 0x09000000
+printStat:	.word	0x000a0009
+symTokMod:	.word	0x0000000, 0x00000000, 0x09000000
+	
 	.text
 
 .globl main
@@ -89,7 +90,8 @@ nextTok:
 	
 	li	$t2, 1
 	sw	$t2, DEFN		# set DEFN to 1
-	la	$t3, VARIABLE
+	la	$t3, var
+
 	jalr	$v1, $t3		# Storing return address in $v1
 	addi	$t8, $t8, 24
 	
@@ -97,13 +99,13 @@ nextTok:
 operator:
 	addi	$t8, $t8, 12
 	li	$t5, 1
-	sw	$t5, isComma		# isComma is set to true
+	sw	$t5, delim		# delim is set to true
 	
 chkVar:
 	lb	$t6, tokArray+9($t8)
 
 	beq	$t6, '5', dumpCont	# End on octothorpe 
-	lw 	$t5, isComma		# if isComma is false, nextVar
+	lw 	$t5, delim		# if delim is false, nextVar
 	bne	$t5, 1, nextVar
 	bne	$t6, '2', nextVar
 	
@@ -115,7 +117,7 @@ chkVar:
 	
 	li	$t2, 0
 	sw	$t2, DEFN
-	la	$t3, VARIABLE
+	la	$t3, var
 	jalr	$v1, $t3
 	
 
@@ -132,7 +134,7 @@ commaNotFound:
 	b 	nextVarCont
 
 nextVarCont:
-	sw	$t5, isComma
+	sw	$t5, delim
 	addi	$t8, $t8, 12
 	bc1f	chkVar
 	 
@@ -150,7 +152,7 @@ dumpCont:
 	
 	b 	newline
 	
-	# if clear symTab, need to reset curSymIndex to 0
+	# if clear symTab, need to reset currentDex to 0
 	
 exit:
 	li $v0, 10
@@ -351,7 +353,7 @@ getfin:
 #   $a0: char x
 #   $s0: retval -- type of the letter in $a0
 lin_search:
-	li	$t0,0		# I
+	li	$t0, 0		# I
 	li	$s0, 7		# retval
 loop:
 	bge	$t0, 72, Ret
@@ -375,78 +377,81 @@ Ret:	jr	$ra
 # NEW
 #####################
 
-VARIABLE:
-	jal	LOOKUP
-	lw	$t0, symIndex
-	blt	$t0, 0, ifFirstOccurrence	# First occurrence of symbol
-	b	ifReoccurring
+var:
+	jal	search
+	lw	$t0, symDex
+	blt	$t0, 0, firstTime	# First occurrence of symbol
+	b	multTimes
 	
-ifFirstOccurrence:
+firstTime:
 	lw	$t2, DEFN
 	ori	$s1, $t2, 0x4
-	sw	$s1, newStatus
+	sw	$s1, newStat
 	jal	saveSymTab
-	b	VARIABLEcont
+	b	varCont
 	
-ifReoccurring:
-	lw	$s1, symTab+12($t0)	# oldStatus = symTab[symIndex][2]
+multTimes:
+	lw	$s1, symTab+12($t0)	# oldStat = symTab[symDex][2]
 	andi	$t0, $s1, 0x2		# oldStatys & 0x2
-	andi	$t3, $s1, 0x1		# oldStatus & 0x1
+	andi	$t3, $s1, 0x1		# oldStat & 0x1
 	sll 	$t3, $t3, 1		# $t3 << 1
 	
-	sw 	$s1, oldStatus
+	sw 	$s1, oldStat
 	
-	or	$s1, $t0, $t3		# newStatus = $t0 | $t3
+	or	$s1, $t0, $t3		# newStat = $t0 | $t3
 	
-	lw	$t0, symIndex
+	lw	$t0, symDex
 	lw	$t2, DEFN
-	or	$s1, $s1, $t2		# newStatus = newStatus | DEFN
-	sw	$s1, newStatus
-	sw	$s1, symTab+12($t0)	# symTab[symIndex][2] = newStatus
+	
+	or	$s1, $s1, $t2		# newStat = newStat | DEFN
+	
+	sw	$s1, newStat
+	sw	$s1, symTab+12($t0)	# symTab[symDex][2] = newStat
 	
 
-VARIABLEcont:
+varCont:
 	la	$s2, symACTS		# Load address of symACTS into $s2
-	lw 	$s1, newStatus
+	lw 	$s1, newStat
 	sll	$s1, $s1, 2		# Mult by size of word
 	add	$s2, $s2, $s1		# Add offset to symACT address		
 
 	lw	$s1, 0($s2)		# Load symAction into $s1
 	jalr 	$s1			# Call symAction, then call retVal
+	
 	sw	$t3, valVar		# valVar = retVal
 	jr 	$v1
 
-LOOKUP:
+search:
 	li	$t3, 0			# i = 0	 
 	
-LOOKUPLoop:	
+searchLoop:	
 	# Initially loading words from symTab and TOKEN
 	lw	$t0, TOKEN($0)
 #	sll 	$t3, $t3, 4		# Mult by 16 (one element in STAB)
 	lw	$t5, symTab($0)
 #	sra	$t3, $t3, 4
-	bne	$t0, $t5, notEqual
+	bne	$t0, $t5, dif
 	
 	# Loading second words from TOKEN and symTab
 	lw	$t0, TOKEN+4($t3)
 #	sll 	$t3, $t3, 4		# Mult by 16 (one element in STAB)
 	lw	$t5, symTab+4($t3)
 #	sra	$t3, $t3, 4
-	beq	$t0, $t5, LOOKUPSuccess
-notEqual:	
+	beq	$t0, $t5, searchFound
+dif:	
 	addi	$t3, $t3, 16		# ++i
-	bge	$t3, 20, LOOKUPFail	# Iterate 20 times (all elements)
-	b	LOOKUPLoop
-LOOKUPSuccess:
-	sw	$t3, symIndex		# Return symIndex
+	bge	$t3, 20, searchNotFound	# Iterate 20 times (all elements)
+	b	searchLoop
+searchFound:
+	sw	$t3, symDex		# Return symDex
 	jr	$ra
-LOOKUPFail:
+searchNotFound:
 	li	$t3, -1			# Return invalid val (-1)
-	sw	$t3, symIndex
+	sw	$t3, symDex
 	jr 	$ra
 	
 saveSymTab:
-	lw	$t5, curSymIndex	
+	lw	$t5, currentDex	
 	lw	$t0, TOKEN($0)		# First word of TOKEN loaded 
 	sw	$t0, symTab($t5)
 	
@@ -456,11 +461,13 @@ saveSymTab:
 	li	$t0, 0
 	sw 	$t0, symTab+8($5)
 	
-	lw 	$t0, newStatus
+	lw 	$t0, newStat
 	sw	$t0, symTab+12($0)
-	sw	$t5, symIndex
+	sw	$t5, symDex
+	
 	addi	$t5, $t5, 16
-	sw	$t5, curSymIndex
+	
+	sw	$t5, currentDex
 	jr 	$ra
 
 
@@ -470,17 +477,17 @@ printSymTab:
 printSymLoop:
 	
 	lw	$t0, symTab($t5)
-	sw	$t0, symTokenPrint($0)
+	sw	$t0, symTokMod($0)
 	
 	lw	$t0, symTab+4($t5)
-	sw	$t0, symTokenPrint+4($0)
+	sw	$t0, symTokMod+4($0)
 			
-	la	$a0, symTokenPrint($0)
+	la	$a0, symTokMod($0)
 	li	$v0, 4
 	syscall
 	
 	lw 	$a0, symTab+8($t5)
-	sw	$ra, saveRA
+	sw	$ra, saveRet
 	jal 	hex2char
 	
 	
@@ -502,7 +509,7 @@ printSymLoop:
 	#sb	$t0, symTab+4($t5)
 	#li	$t0, '\0'
 	#sb 	$t0, symTab+15($t5)
-	lw	$ra, saveRA
+	lw	$ra, saveRet
 	
 	#la	$a0, symTab+8($t5)
 	#li	$v0, 4
@@ -511,8 +518,9 @@ printSymLoop:
 	
 	
 	srl	$v0, $v0, 24				# move num to beginning of word 
-	sb	$v0, symStatusPrint+1($0)
-	la	$a0, symStatusPrint($0)
+	sb	$v0, printStat+1($0)
+	
+	la	$a0, printStat($0)
 	li	$v0, 4
 	syscall
 	
@@ -523,6 +531,7 @@ printSymLoop:
 	addi 	$t5, $t5, 16
 	blt	$t5, 320, printSymLoop
 	li	$t3, 0x20202020
+	
 	sw	$t3, TOKEN($0)
 	sw	$t3, TOKEN+4($0)
 	
@@ -532,13 +541,14 @@ printSymLoop:
 
 clearSymTab:
 	li	$t0, 0
-	sw	$t5, curSymIndex
+	sw	$t5, currentDex
 	
 symLoop:	# Fills tokArrray with zeroes
-
 	bge	$t0, 320, endSymLoop
 	li	$t6, 0
+	
 	sb	$t6, symTab($t0)
+	
 	addi	$t0, $t0, 1
 	b symLoop
 
@@ -548,42 +558,50 @@ endSymLoop:
 		
 			
 symACT0:
-	lw	$t5, symIndex
+	lw	$t5, symDex
 	lw	$t0, LOC
 	lw	$t3, symTab+8($t5)	# Loading VALUE into $t3, to be returned
+	
 	sw	$t0, symTab+8($t5)	# VALUE = LOC
 	jr 	$ra
 	
 symACT1:
-	lw	$t5, symIndex
+	lw	$t5, symDex
 	lw	$t0, LOC
 	lw	$t3, symTab+8($t5)	# Loading VALUE into $t3, to be returned
+	
 	sw	$t0, symTab+8($t5)	# VALUE = LOC
 	jr 	$ra
 
 symACT2:
-	lw	$t5, symIndex
+	lw	$t5, symDex
 	lw	$t3, symTab+8($t5)	# Still the same as previous
+	
 	jr 	$ra
 
 symACT3:
 	la	$a0, double_error
 	li	$v0, 4			
 	syscall				# Print out double definition error
+	
 	li	$t3, 0xFFFF		## Returning -1
 	jr 	$ra
 
 symACT4:
-	lw	$t5, symIndex
+	lw	$t5, symDex
 	lw 	$t0, LOC
+	
 	sw	$t0, symTab+8($t5)
+	
 	li	$t3, 0xFFFF
 	jr 	$ra
 
 symACT5:
-	lw	$t5, symIndex
+	lw	$t5, symDex
 	lw 	$t0, LOC
+	
 	sw	$t0, symTab+8($t5)
+	
 	li	$t3, 0	
 	jr 	$ra
 
